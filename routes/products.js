@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { Op, fn, col, where } = require("sequelize");
 const {Product, User} = require("../models");
 const upload = require("../middlewares/uploads");
 
@@ -33,6 +34,80 @@ router.post("/products", upload.array("images", 5), async (req, res) => {
     }
   }
 );
+
+router.get("/products/search", async (req, res) => {
+  const query = (req.query.q || "").trim().toLowerCase();
+  const userId = parseInt(req.query.userId);
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const offset = (page - 1) * limit;
+
+  if (!query) {
+    return res.json({
+      totalItems: 0,
+      totalPages: 0,
+      currentPage: page,
+      products: [],
+    });
+  }
+
+  try {
+    const include = [
+      {
+        model: User,
+        as: "seller",
+        attributes: ["id", "name", "phone", "location", "role", "isVerified", "image"],
+      },
+    ];
+
+    if (!Number.isNaN(userId) && userId > 0) {
+      include.push({
+        model: User,
+        as: "favoritedByUsers",
+        where: { id: userId },
+        required: false,
+        attributes: ["id"],
+        through: { attributes: [] },
+      });
+    }
+
+    const { count, rows: products } = await Product.findAndCountAll({
+      where: {
+        [Op.or]: [
+          where(fn("LOWER", col("Product.title")), {
+            [Op.like]: `%${query}%`,
+          }),
+          where(fn("LOWER", col("Product.description")), {
+            [Op.like]: `%${query}%`,
+          }),
+        ],
+      },
+      include,
+      limit,
+      offset,
+      order: [["createdAt", "DESC"]],
+    });
+
+    const productsWithFavorite = products.map((product) => {
+      const prodJson = product.toJSON();
+      prodJson.isFavorite = !!(
+        prodJson.favoritedByUsers && prodJson.favoritedByUsers.length > 0
+      );
+      delete prodJson.favoritedByUsers;
+      return prodJson;
+    });
+
+    res.json({
+      totalItems: count,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page,
+      products: productsWithFavorite,
+    });
+  } catch (error) {
+    console.error("Error searching products:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 router.get("/products/:id", async (req, res) => {
   const userId = req.params.id; 
