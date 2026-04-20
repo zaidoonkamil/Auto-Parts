@@ -146,13 +146,21 @@ router.post("/orders/:userId", uploads.none(), async (req, res) => {
       if (prod.seller) {
         const message = `ØªÙ… Ø·Ù„Ø¨ Ù…Ù†ØªØ¬Ùƒ: ${prod.name} (Ø§Ù„ÙƒÙ…ÙŠØ©: ${item.quantity})`;
         const title = "Ø·Ù„Ø¨ Ø¬Ø¯ÙŠØ¯";
-        await sendNotificationToUser(prod.seller.id, message, title);
+        try {
+          await sendNotificationToUser(prod.seller.id, message, title);
+        } catch (notificationError) {
+          console.error("Order notification failed:", notificationError);
+        }
       }
     }
 
-    const basket = await Basket.findOne({ where: { userId } });
-    if (basket) {
-      await BasketItem.destroy({ where: { basketId: basket.id } });
+    try {
+      const basket = await Basket.findOne({ where: { userId } });
+      if (basket) {
+        await BasketItem.destroy({ where: { basketId: basket.id } });
+      }
+    } catch (basketError) {
+      console.error("Basket cleanup failed after order creation:", basketError);
     }
 
     return res.status(201).json({
