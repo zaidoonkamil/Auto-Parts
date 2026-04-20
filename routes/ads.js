@@ -7,7 +7,14 @@ const { sendNotificationToAll  } = require('../services/notifications');
 
 router.post("/ads", upload.array("images", 5), async (req, res) => {
   try {
-    const { name, description } = req.body;
+    const {
+      name,
+      description,
+      title_ar,
+      title_ckb,
+      description_ar,
+      description_ckb,
+    } = req.body;
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: "جميع الحقول مطلوبة" });
     }
@@ -18,6 +25,10 @@ router.post("/ads", upload.array("images", 5), async (req, res) => {
       images,
       title: name,
       description: description,
+      title_ar: title_ar || null,
+      title_ckb: title_ckb || null,
+      description_ar: description_ar || null,
+      description_ckb: description_ckb || null,
     });
 
     

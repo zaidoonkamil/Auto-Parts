@@ -5,7 +5,17 @@ const {Product, User} = require("../models");
 const upload = require("../middlewares/uploads");
 
 router.post("/products", upload.array("images", 5), async (req, res) => {
-    const { title, description, price, userId, categoryId} = req.body;
+    const {
+      title,
+      description,
+      price,
+      userId,
+      categoryId,
+      title_ar,
+      title_ckb,
+      description_ar,
+      description_ckb,
+    } = req.body;
 
     if (!title || !price) {
       return res.status(400).json({ error: "العنوان والسعر مطلوبان" });
@@ -21,6 +31,10 @@ router.post("/products", upload.array("images", 5), async (req, res) => {
       const product = await Product.create({
         title,
         description,
+        title_ar: title_ar || null,
+        title_ckb: title_ckb || null,
+        description_ar: description_ar || null,
+        description_ckb: description_ckb || null,
         price,
         images,
         userId,
@@ -79,6 +93,18 @@ router.get("/products/search", async (req, res) => {
             [Op.like]: `%${query}%`,
           }),
           where(fn("LOWER", col("Product.description")), {
+            [Op.like]: `%${query}%`,
+          }),
+          where(fn("LOWER", fn("COALESCE", col("Product.title_ar"), "")), {
+            [Op.like]: `%${query}%`,
+          }),
+          where(fn("LOWER", fn("COALESCE", col("Product.title_ckb"), "")), {
+            [Op.like]: `%${query}%`,
+          }),
+          where(fn("LOWER", fn("COALESCE", col("Product.description_ar"), "")), {
+            [Op.like]: `%${query}%`,
+          }),
+          where(fn("LOWER", fn("COALESCE", col("Product.description_ckb"), "")), {
             [Op.like]: `%${query}%`,
           }),
         ],

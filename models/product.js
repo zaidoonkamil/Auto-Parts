@@ -11,7 +11,23 @@ const Product = sequelize.define("Product", {
         type: DataTypes.STRING,
         allowNull: false,
     },
+    title_ar: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    title_ckb: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
     description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    description_ar: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    description_ckb: {
         type: DataTypes.TEXT,
         allowNull: true,
     },

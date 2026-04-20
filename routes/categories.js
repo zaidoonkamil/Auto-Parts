@@ -4,7 +4,7 @@ const { Category, Product, User } = require('../models');
 const upload = require("../middlewares/uploads");
 
 router.post("/categories", upload.array("images", 5), async (req, res) => {
-  const { name } = req.body;
+  const { name, name_ar, name_ckb } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: "اسم القسم مطلوب" });
@@ -21,7 +21,12 @@ router.post("/categories", upload.array("images", 5), async (req, res) => {
       return res.status(400).json({ error: "يجب رفع صورة واحدة على الأقل" });
     }
 
-    const category = await Category.create({ name, images });
+    const category = await Category.create({
+      name,
+      name_ar: name_ar || null,
+      name_ckb: name_ckb || null,
+      images,
+    });
 
     res.status(201).json(category);
   } catch (error) {
