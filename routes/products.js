@@ -57,6 +57,7 @@ router.get("/products/search", async (req, res) => {
         model: User,
         as: "seller",
         attributes: ["id", "name", "phone", "location", "role", "isVerified", "image"],
+        required: true,
       },
     ];
 
@@ -105,6 +106,61 @@ router.get("/products/search", async (req, res) => {
     });
   } catch (error) {
     console.error("Error searching products:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+router.get("/products/featured", async (req, res) => {
+  const userId = parseInt(req.query.userId);
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 8;
+  const offset = (page - 1) * limit;
+
+  try {
+    const include = [
+      {
+        model: User,
+        as: "seller",
+        attributes: ["id", "name", "phone", "location", "role", "isVerified", "image"],
+      },
+    ];
+
+    if (!Number.isNaN(userId) && userId > 0) {
+      include.push({
+        model: User,
+        as: "favoritedByUsers",
+        where: { id: userId },
+        required: false,
+        attributes: ["id"],
+        through: { attributes: [] },
+      });
+    }
+
+    const { count, rows: products } = await Product.findAndCountAll({
+      include,
+      distinct: true,
+      limit,
+      offset,
+      order: [Product.sequelize.random()],
+    });
+
+    const productsWithFavorite = products.map((product) => {
+      const prodJson = product.toJSON();
+      prodJson.isFavorite = !!(
+        prodJson.favoritedByUsers && prodJson.favoritedByUsers.length > 0
+      );
+      delete prodJson.favoritedByUsers;
+      return prodJson;
+    });
+
+    res.json({
+      totalItems: count,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page,
+      products: productsWithFavorite,
+    });
+  } catch (error) {
+    console.error("Error fetching featured products:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
