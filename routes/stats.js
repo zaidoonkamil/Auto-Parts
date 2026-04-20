@@ -14,9 +14,15 @@ router.get("/stats", async (req, res) => {
 
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    // ======= Users =======
-    const [totalUsers, verifiedUsers, adminCount, normalUsers,
-      newTodayUsers, newWeekUsers, newMonthUsers] = await Promise.all([
+    const [
+      totalUsers,
+      verifiedUsers,
+      adminCount,
+      normalUsers,
+      newTodayUsers,
+      newWeekUsers,
+      newMonthUsers,
+    ] = await Promise.all([
       User.count(),
       User.count({ where: { isVerified: true } }),
       User.count({ where: { role: "admin" } }),
@@ -26,34 +32,46 @@ router.get("/stats", async (req, res) => {
       User.count({ where: { createdAt: { [Op.gte]: startOfMonth } } }),
     ]);
 
-    // ======= Orders =======
-    const [totalOrders, todayOrders, weekOrders, monthOrders, ordersCompleted] = await Promise.all([
-      Order.count(),
-      Order.count({ where: { createdAt: { [Op.gte]: today } } }),
-      Order.count({ where: { createdAt: { [Op.gte]: startOfWeek } } }),
-      Order.count({ where: { createdAt: { [Op.gte]: startOfMonth } } }),
-      Order.findAll({ where: { status: "مكتمل" }, attributes: ["totalPrice"] }),
-    ]);
+    const [totalOrders, todayOrders, weekOrders, monthOrders, ordersCompleted] =
+      await Promise.all([
+        Order.count(),
+        Order.count({ where: { createdAt: { [Op.gte]: today } } }),
+        Order.count({ where: { createdAt: { [Op.gte]: startOfWeek } } }),
+        Order.count({ where: { createdAt: { [Op.gte]: startOfMonth } } }),
+        Order.findAll({ where: { status: "completed" }, attributes: ["totalPrice"] }),
+      ]);
 
     const totalRevenue = ordersCompleted.reduce((sum, o) => sum + o.totalPrice, 0);
 
     const statusCounts = {};
-    for (const status of ["قيد الانتضار", "قيد التوصيل", "مكتمل", "ملغي"]) {
+    for (const status of ["pending", "delivery", "completed", "cancelled"]) {
       statusCounts[status] = await Order.count({ where: { status } });
     }
 
-    // ======= Products =======
-    const [totalProducts, newTodayProducts, newWeekProducts, newMonthProducts, productsByCategory, productsBySeller] = await Promise.all([
+    const [
+      totalProducts,
+      newTodayProducts,
+      newWeekProducts,
+      newMonthProducts,
+      productsByCategory,
+      productsBySeller,
+    ] = await Promise.all([
       Product.count(),
       Product.count({ where: { createdAt: { [Op.gte]: today } } }),
       Product.count({ where: { createdAt: { [Op.gte]: startOfWeek } } }),
       Product.count({ where: { createdAt: { [Op.gte]: startOfMonth } } }),
       Product.findAll({
-        attributes: ["categoryId", [Product.sequelize.fn("COUNT", Product.sequelize.col("id")), "count"]],
+        attributes: [
+          "categoryId",
+          [Product.sequelize.fn("COUNT", Product.sequelize.col("id")), "count"],
+        ],
         group: ["categoryId"],
       }),
       Product.findAll({
-        attributes: ["userId", [Product.sequelize.fn("COUNT", Product.sequelize.col("id")), "count"]],
+        attributes: [
+          "userId",
+          [Product.sequelize.fn("COUNT", Product.sequelize.col("id")), "count"],
+        ],
         group: ["userId"],
         order: [[Product.sequelize.literal("count"), "DESC"]],
         limit: 5,
@@ -81,7 +99,7 @@ router.get("/stats", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("❌ Error fetching stats:", err);
+    console.error("Error fetching stats:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });

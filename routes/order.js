@@ -6,15 +6,16 @@ const uploads = multer();
 const { Op } = require("sequelize");
 const { sendNotificationToUser } = require("../services/notifications");
 
+const ORDER_STATUSES = ["pending", "delivery", "completed", "cancelled"];
+
 router.get("/orders/admin/status", async (req, res) => {
-  const allowedStatuses = ["Ù‚ÙŠØ¯ Ø§Ù„Ø§Ù†ØªØ¶Ø§Ø±", "Ù‚ÙŠØ¯ Ø§Ù„ØªÙˆØµÙŠÙ„", "Ù…ÙƒØªÙ…Ù„", "Ù…Ù„ØºÙŠ"];
   const status = (req.query.status || "").trim();
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 40;
   const offset = (page - 1) * limit;
 
-  if (!allowedStatuses.includes(status)) {
-    return res.status(400).json({ error: "Ø­Ø§Ù„Ø© Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± ØµØ­ÙŠØ­Ø©" });
+  if (!ORDER_STATUSES.includes(status)) {
+    return res.status(400).json({ error: "حالة الطلب غير صحيحة" });
   }
 
   try {
@@ -48,7 +49,7 @@ router.get("/orders/admin/status", async (req, res) => {
         const totalItemsOrder = order.OrderItems.reduce((sum, item) => sum + item.quantity, 0);
         const totalPrice = order.OrderItems.reduce(
           (sum, item) => sum + item.quantity * item.priceAtOrder,
-          0
+          0,
         );
 
         return {
@@ -86,7 +87,7 @@ router.get("/orders/admin/status", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("âŒ Error fetching admin orders by status:", error);
+    console.error("Error fetching admin orders by status:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -96,17 +97,17 @@ router.post("/orders/:userId", uploads.none(), async (req, res) => {
   const { phone, address, products } = req.body;
 
   if (!phone || !address) {
-    return res.status(400).json({ error: "Ø±Ù‚Ù… Ø§Ù„Ù‡Ø§ØªÙ ÙˆØ§Ù„Ø¹Ù†ÙˆØ§Ù† Ù…Ø·Ù„ÙˆØ¨Ø§Ù†" });
+    return res.status(400).json({ error: "رقم الهاتف والعنوان مطلوبان" });
   }
 
   if (!products || !Array.isArray(products) || products.length === 0) {
-    return res.status(400).json({ error: "ÙŠØ¬Ø¨ ØªÙ…Ø±ÙŠØ± Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª Ù…Ø¹ Ø§Ù„ÙƒÙ…ÙŠØ§Øª" });
+    return res.status(400).json({ error: "يجب تمرير قائمة المنتجات مع الكميات" });
   }
 
   try {
     for (const item of products) {
       if (typeof item.productId !== "number" || typeof item.quantity !== "number" || item.quantity <= 0) {
-        return res.status(400).json({ error: "Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ù†ØªØ¬Ø§Øª ØºÙŠØ± ØµØ­ÙŠØ­Ø©" });
+        return res.status(400).json({ error: "بيانات المنتجات غير صحيحة" });
       }
     }
 
@@ -117,7 +118,7 @@ router.post("/orders/:userId", uploads.none(), async (req, res) => {
     });
 
     if (dbProducts.length !== products.length) {
-      return res.status(400).json({ error: "Ù…Ù†ØªØ¬Ø§Øª ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯Ø© ÙÙŠ Ø§Ù„Ù†Ø¸Ø§Ù…" });
+      return res.status(400).json({ error: "منتجات غير موجودة في النظام" });
     }
 
     let totalPrice = 0;
@@ -131,7 +132,7 @@ router.post("/orders/:userId", uploads.none(), async (req, res) => {
       phone,
       address,
       totalPrice,
-      status: "Ù‚ÙŠØ¯ Ø§Ù„Ø§Ù†ØªØ¶Ø§Ø±",
+      status: "pending",
     });
 
     for (const item of products) {
@@ -144,8 +145,8 @@ router.post("/orders/:userId", uploads.none(), async (req, res) => {
       });
 
       if (prod.seller) {
-        const message = `ØªÙ… Ø·Ù„Ø¨ Ù…Ù†ØªØ¬Ùƒ: ${prod.name} (Ø§Ù„ÙƒÙ…ÙŠØ©: ${item.quantity})`;
-        const title = "Ø·Ù„Ø¨ Ø¬Ø¯ÙŠØ¯";
+        const message = `تم طلب منتج: ${prod.title} (الكمية: ${item.quantity})`;
+        const title = "طلب جديد";
         try {
           await sendNotificationToUser(prod.seller.id, message, title);
         } catch (notificationError) {
@@ -164,11 +165,11 @@ router.post("/orders/:userId", uploads.none(), async (req, res) => {
     }
 
     return res.status(201).json({
-      message: "ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø·Ù„Ø¨ Ø¨Ù†Ø¬Ø§Ø­",
+      message: "تم إنشاء الطلب بنجاح",
       orderId: order.id,
     });
   } catch (error) {
-    console.error("âŒ Error creating order:", error);
+    console.error("Error creating order:", error);
     return res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -177,10 +178,8 @@ router.patch("/orders/:orderId/status", uploads.none(), async (req, res) => {
   const { orderId } = req.params;
   const { status } = req.body;
 
-  const allowedStatuses = ["Ù‚ÙŠØ¯ Ø§Ù„Ø§Ù†ØªØ¶Ø§Ø±", "Ù‚ÙŠØ¯ Ø§Ù„ØªÙˆØµÙŠÙ„", "Ù…ÙƒØªÙ…Ù„", "Ù…Ù„ØºÙŠ"];
-
-  if (!allowedStatuses.includes(status)) {
-    return res.status(400).json({ error: "Ø­Ø§Ù„Ø© Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± ØµØ­ÙŠØ­Ø©" });
+  if (!ORDER_STATUSES.includes(status)) {
+    return res.status(400).json({ error: "حالة الطلب غير صحيحة" });
   }
 
   try {
@@ -189,7 +188,7 @@ router.patch("/orders/:orderId/status", uploads.none(), async (req, res) => {
     });
 
     if (!order) {
-      return res.status(404).json({ error: "Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯" });
+      return res.status(404).json({ error: "الطلب غير موجود" });
     }
 
     order.status = status;
@@ -198,22 +197,18 @@ router.patch("/orders/:orderId/status", uploads.none(), async (req, res) => {
     let notificationResult = null;
 
     if (order.user) {
-      const message = `ØªÙ… ØªØ­Ø¯ÙŠØ« Ø­Ø§Ù„Ø© Ø·Ù„Ø¨Ùƒ Ø¥Ù„Ù‰: ${status}`;
-      const title = "ØªØ­Ø¯ÙŠØ« Ø­Ø§Ù„Ø© Ø§Ù„Ø·Ù„Ø¨";
+      const message = `تم تحديث حالة طلبك إلى: ${status}`;
+      const title = "تحديث حالة الطلب";
       notificationResult = await sendNotificationToUser(order.user.id, message, title);
-
-      console.log("ðŸ”” Notification result:", notificationResult);
-    } else {
-      console.log("âš ï¸ Ø§Ù„Ø·Ù„Ø¨ Ù…ÙˆØ¬ÙˆØ¯ Ù„ÙƒÙ† Ù…Ø§ Ø±Ø¬Ø¹ Ù…Ø¹Ù‡ Ù…Ø³ØªØ®Ø¯Ù… Ù…Ø±ØªØ¨Ø·.");
     }
 
     res.status(200).json({
-      message: "ØªÙ… ØªØ­Ø¯ÙŠØ« Ø­Ø§Ù„Ø© Ø§Ù„Ø·Ù„Ø¨",
+      message: "تم تحديث حالة الطلب",
       order,
       notificationResult,
     });
   } catch (error) {
-    console.error("âŒ Error updating order status:", error);
+    console.error("Error updating order status:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -222,7 +217,7 @@ router.get("/orders/:userId", uploads.none(), async (req, res) => {
   const userId = req.params.userId;
 
   if (!userId) {
-    return res.status(400).json({ error: "ÙŠØ±Ø¬Ù‰ ØªØ­Ø¯ÙŠØ¯ Ù…Ø¹Ø±Ù Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… userId" });
+    return res.status(400).json({ error: "يرجى تحديد معرف المستخدم userId" });
   }
 
   let page = parseInt(req.query.page) || 1;
@@ -255,7 +250,7 @@ router.get("/orders/:userId", uploads.none(), async (req, res) => {
         const totalItems = order.OrderItems.reduce((sum, item) => sum + item.quantity, 0);
         const totalPrice = order.OrderItems.reduce(
           (sum, item) => sum + item.quantity * item.priceAtOrder,
-          0
+          0,
         );
 
         return {
@@ -277,7 +272,7 @@ router.get("/orders/:userId", uploads.none(), async (req, res) => {
       orders: ordersData,
     });
   } catch (error) {
-    console.error("âŒ Error fetching orders:", error);
+    console.error("Error fetching orders:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
