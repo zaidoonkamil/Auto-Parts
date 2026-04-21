@@ -56,7 +56,7 @@ router.get("/products/search", async (req, res) => {
   const limit = parseInt(req.query.limit) || 20;
   const offset = (page - 1) * limit;
 
-  if (!query) {
+  if (!query || query.length < 2) {
     return res.json({
       totalItems: 0,
       totalPages: 0,
@@ -86,6 +86,9 @@ router.get("/products/search", async (req, res) => {
       });
     }
 
+    const startsWithQuery = Product.sequelize.escape(`${query}%`);
+    const containsQuery = Product.sequelize.escape(`%${query}%`);
+
     const { count, rows: products } = await Product.findAndCountAll({
       where: {
         [Op.or]: [
@@ -112,7 +115,21 @@ router.get("/products/search", async (req, res) => {
       include,
       limit,
       offset,
-      order: [["createdAt", "DESC"]],
+      order: [
+        [
+          Product.sequelize.literal(`
+            CASE
+              WHEN LOWER(COALESCE(Product.title_ar, Product.title_ckb, Product.title, '')) LIKE ${startsWithQuery} THEN 0
+              WHEN LOWER(COALESCE(Product.description_ar, Product.description_ckb, Product.description, '')) LIKE ${startsWithQuery} THEN 1
+              WHEN LOWER(COALESCE(Product.title_ar, Product.title_ckb, Product.title, '')) LIKE ${containsQuery} THEN 2
+              WHEN LOWER(COALESCE(Product.description_ar, Product.description_ckb, Product.description, '')) LIKE ${containsQuery} THEN 3
+              ELSE 4
+            END
+          `),
+          "ASC",
+        ],
+        ["createdAt", "DESC"],
+      ],
     });
 
     const productsWithFavorite = products.map((product) => {
