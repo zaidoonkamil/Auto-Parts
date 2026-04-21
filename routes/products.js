@@ -71,7 +71,7 @@ router.get("/products/search", async (req, res) => {
         model: User,
         as: "seller",
         attributes: ["id", "name", "phone", "location", "role", "isVerified", "image"],
-        required: true,
+        required: false,
       },
     ];
 
