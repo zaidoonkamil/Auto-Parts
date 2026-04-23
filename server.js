@@ -1,7 +1,9 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const { Op } = require("sequelize");
 const sequelize = require("./config/db");
+const { Product, Category } = require("./models");
 
 const usersRouter = require("./routes/user");
 const adsRouter = require("./routes/ads");
@@ -14,10 +16,46 @@ const statsRouter = require("./routes/stats");
 const notifications = require("./routes/notifications.js");
 const chat = require("./routes/chatRoutes");
 
+async function cleanupProductsWithoutSubcategory() {
+  const subcategories = await Category.findAll({
+    where: {
+      parentId: {
+        [Op.not]: null,
+      },
+    },
+    attributes: ["id"],
+  });
 
-sequelize.sync({ alter: true })
-  .then(() => {console.log("✅ Database & tables synced!");
-  }).catch((err) => { console.error("❌ Error syncing database:", err);  });
+  const validSubcategoryIds = subcategories.map((item) => item.id);
+  const deletedCount = await Product.destroy({
+    where: {
+      [Op.or]: validSubcategoryIds.length
+          ? [
+              { categoryId: null },
+              {
+                categoryId: {
+                  [Op.notIn]: validSubcategoryIds,
+                },
+              },
+            ]
+          : [{ id: { [Op.not]: null } }],
+    },
+  });
+
+  if (deletedCount > 0) {
+    console.log(`Deleted ${deletedCount} products not linked to subcategories`);
+  }
+}
+
+sequelize
+  .sync({ alter: true })
+  .then(async () => {
+    console.log("Database & tables synced!");
+    await cleanupProductsWithoutSubcategory();
+  })
+  .catch((err) => {
+    console.error("Error syncing database:", err);
+  });
 
 const app = express();
 const server = http.createServer(app);
@@ -45,5 +83,5 @@ app.use("/", chat.router);
 chat.initChatSocket(io);
 
 server.listen(1006, () => {
-  console.log(`🚀 Server running on http://localhost:1006`);
+  console.log("Server running on http://localhost:1006");
 });

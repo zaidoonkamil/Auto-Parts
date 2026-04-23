@@ -1,53 +1,71 @@
 const express = require("express");
 const router = express.Router();
 const { Op, fn, col, where } = require("sequelize");
-const {Product, User} = require("../models");
+const { Product, User, Category } = require("../models");
 const upload = require("../middlewares/uploads");
 
+function subcategoryInclude(required = true) {
+  return {
+    model: Category,
+    as: "category",
+    attributes: ["id", "name", "name_ar", "name_ckb", "parentId"],
+    required,
+    where: {
+      parentId: {
+        [Op.not]: null,
+      },
+    },
+  };
+}
+
 router.post("/products", upload.array("images", 5), async (req, res) => {
-    const {
+  const {
+    title,
+    description,
+    price,
+    userId,
+    categoryId,
+    title_ar,
+    title_ckb,
+    description_ar,
+    description_ckb,
+  } = req.body;
+
+  if (!title || !price) {
+    return res.status(400).json({ error: "العنوان والسعر مطلوبان" });
+  }
+
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: "يجب رفع صورة واحدة على الأقل" });
+  }
+
+  try {
+    const category = await Category.findByPk(categoryId);
+    if (!category || !category.parentId) {
+      return res.status(400).json({ error: "يجب اختيار قسم فرعي صالح للمنتج" });
+    }
+
+    const images = req.files.map((file) => file.filename);
+
+    const product = await Product.create({
       title,
       description,
+      title_ar: title_ar || null,
+      title_ckb: title_ckb || null,
+      description_ar: description_ar || null,
+      description_ckb: description_ckb || null,
       price,
+      images,
       userId,
       categoryId,
-      title_ar,
-      title_ckb,
-      description_ar,
-      description_ckb,
-    } = req.body;
+    });
 
-    if (!title || !price) {
-      return res.status(400).json({ error: "العنوان والسعر مطلوبان" });
-    }
-
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: "يجب رفع صورة واحدة على الأقل" });
-    }
-
-    try {
-      const images = req.files.map((file) => file.filename);
-
-      const product = await Product.create({
-        title,
-        description,
-        title_ar: title_ar || null,
-        title_ckb: title_ckb || null,
-        description_ar: description_ar || null,
-        description_ckb: description_ckb || null,
-        price,
-        images,
-        userId,
-        categoryId,
-      });
-
-      res.status(201).json(product);
-    } catch (error) {
-      console.error("❌ Error creating product:", error);
-      res.status(500).json({ error: "Internal Server Error" });
-    }
+    res.status(201).json(product);
+  } catch (error) {
+    console.error("Error creating product:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
-);
+});
 
 router.get("/products/search", async (req, res) => {
   const query = (req.query.q || "").trim().toLowerCase();
@@ -73,6 +91,7 @@ router.get("/products/search", async (req, res) => {
         attributes: ["id", "name", "phone", "location", "role", "isVerified", "image"],
         required: false,
       },
+      subcategoryInclude(true),
     ];
 
     if (!Number.isNaN(userId) && userId > 0) {
@@ -92,27 +111,16 @@ router.get("/products/search", async (req, res) => {
     const { count, rows: products } = await Product.findAndCountAll({
       where: {
         [Op.or]: [
-          where(fn("LOWER", col("Product.title")), {
-            [Op.like]: `%${query}%`,
-          }),
-          where(fn("LOWER", col("Product.description")), {
-            [Op.like]: `%${query}%`,
-          }),
-          where(fn("LOWER", fn("COALESCE", col("Product.title_ar"), "")), {
-            [Op.like]: `%${query}%`,
-          }),
-          where(fn("LOWER", fn("COALESCE", col("Product.title_ckb"), "")), {
-            [Op.like]: `%${query}%`,
-          }),
-          where(fn("LOWER", fn("COALESCE", col("Product.description_ar"), "")), {
-            [Op.like]: `%${query}%`,
-          }),
-          where(fn("LOWER", fn("COALESCE", col("Product.description_ckb"), "")), {
-            [Op.like]: `%${query}%`,
-          }),
+          where(fn("LOWER", col("Product.title")), { [Op.like]: `%${query}%` }),
+          where(fn("LOWER", col("Product.description")), { [Op.like]: `%${query}%` }),
+          where(fn("LOWER", fn("COALESCE", col("Product.title_ar"), "")), { [Op.like]: `%${query}%` }),
+          where(fn("LOWER", fn("COALESCE", col("Product.title_ckb"), "")), { [Op.like]: `%${query}%` }),
+          where(fn("LOWER", fn("COALESCE", col("Product.description_ar"), "")), { [Op.like]: `%${query}%` }),
+          where(fn("LOWER", fn("COALESCE", col("Product.description_ckb"), "")), { [Op.like]: `%${query}%` }),
         ],
       },
       include,
+      distinct: true,
       limit,
       offset,
       order: [
@@ -165,7 +173,9 @@ router.get("/products/featured", async (req, res) => {
         model: User,
         as: "seller",
         attributes: ["id", "name", "phone", "location", "role", "isVerified", "image"],
+        required: false,
       },
+      subcategoryInclude(true),
     ];
 
     if (!Number.isNaN(userId) && userId > 0) {
@@ -209,7 +219,7 @@ router.get("/products/featured", async (req, res) => {
 });
 
 router.get("/products/:id", async (req, res) => {
-  const userId = req.params.id; 
+  const userId = req.params.id;
 
   try {
     let { page, limit } = req.query;
@@ -223,22 +233,25 @@ router.get("/products/:id", async (req, res) => {
           model: User,
           as: "seller",
           attributes: ["id", "name", "phone", "location", "role", "isVerified", "image"],
+          required: false,
         },
+        subcategoryInclude(true),
         {
           model: User,
           as: "favoritedByUsers",
           where: { id: userId },
-          required: false,   
+          required: false,
           attributes: ["id"],
-          through: { attributes: [] }, 
+          through: { attributes: [] },
         },
       ],
+      distinct: true,
       limit,
       offset,
       order: [["createdAt", "DESC"]],
     });
 
-    const productsWithFavorite = products.map(product => {
+    const productsWithFavorite = products.map((product) => {
       const isFavorite = product.favoritedByUsers && product.favoritedByUsers.length > 0;
       const prodJson = product.toJSON();
       prodJson.isFavorite = isFavorite;
@@ -255,7 +268,7 @@ router.get("/products/:id", async (req, res) => {
       products: productsWithFavorite,
     });
   } catch (error) {
-    console.error("❌ Error fetching products:", error);
+    console.error("Error fetching products:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -263,11 +276,14 @@ router.get("/products/:id", async (req, res) => {
 router.get("/productItem/:id", async (req, res) => {
   try {
     const product = await Product.findByPk(req.params.id, {
-      include: {
-        model: User,
-        as: "seller",
-        attributes: ["id", "name", "phone", "location", "role", "isVerified", "image"],
-      },
+      include: [
+        {
+          model: User,
+          as: "seller",
+          attributes: ["id", "name", "phone", "location", "role", "isVerified", "image"],
+        },
+        subcategoryInclude(false),
+      ],
     });
 
     if (!product) {
@@ -276,7 +292,7 @@ router.get("/productItem/:id", async (req, res) => {
 
     res.json(product);
   } catch (error) {
-    console.error("❌ Error fetching product:", error);
+    console.error("Error fetching product:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -291,7 +307,7 @@ router.delete("/products/:id", async (req, res) => {
     await product.destroy();
     res.status(204).send();
   } catch (error) {
-    console.error("❌ Error deleting product:", error);
+    console.error("Error deleting product:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -306,22 +322,17 @@ router.get("/products/seller/:sellerId", async (req, res) => {
     const offset = (page - 1) * limit;
 
     const { count, rows: products } = await Product.findAndCountAll({
-      where: { userId: sellerId }, 
+      where: { userId: sellerId },
       include: [
         {
           model: User,
           as: "seller",
-          attributes: [
-            "id",
-            "name",
-            "phone",
-            "location",
-            "role",
-            "isVerified",
-            "image",
-          ],
+          attributes: ["id", "name", "phone", "location", "role", "isVerified", "image"],
+          required: false,
         },
+        subcategoryInclude(true),
       ],
+      distinct: true,
       limit,
       offset,
       order: [["createdAt", "DESC"]],
@@ -336,7 +347,7 @@ router.get("/products/seller/:sellerId", async (req, res) => {
       products,
     });
   } catch (error) {
-    console.error("❌ Error fetching seller products:", error);
+    console.error("Error fetching seller products:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });

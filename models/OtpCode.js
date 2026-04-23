@@ -15,6 +15,11 @@ const OtpCode = sequelize.define("OtpCode", {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  purpose: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: "activation",
+  },
   isUsed: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
