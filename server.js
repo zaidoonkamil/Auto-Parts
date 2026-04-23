@@ -15,6 +15,8 @@ const basketRouter = require("./routes/Basket");
 const statsRouter = require("./routes/stats");
 const notifications = require("./routes/notifications.js");
 const chat = require("./routes/chatRoutes");
+const whatsappRouter = require("./routes/whatsapp");
+const { startWhatsAppAutoInit } = require("./services/waSender");
 
 async function cleanupProductsWithoutSubcategory() {
   const subcategories = await Category.findAll({
@@ -78,9 +80,11 @@ app.use("/", orderRouter);
 app.use("/", basketRouter);
 app.use("/", notifications);
 app.use("/", statsRouter);
+app.use("/", whatsappRouter);
 app.use("/", chat.router);
 
 chat.initChatSocket(io);
+startWhatsAppAutoInit();
 
 server.listen(1006, () => {
   console.log("Server running on http://localhost:1006");
