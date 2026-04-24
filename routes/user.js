@@ -6,7 +6,7 @@ const { Op } = require("sequelize");
 const uploadImage = require("../middlewares/uploads");
 const { User, UserDevice } = require("../models");
 const { createOtp, normalizePhone, verifyOtp } = require("../services/otpService");
-const { sendOtpTemplate } = require("../services/whatsappService");
+const { sendWhatsAppText } = require("../services/waSender");
 
 const saltRounds = 10;
 const router = express.Router();
@@ -32,7 +32,19 @@ function parseOtpPurpose(purpose) {
 
 async function sendOtpForPurpose(phone, purpose) {
   const otp = await createOtp(phone, purpose);
-  await sendOtpTemplate(otp.phone, otp.code);
+
+  const purposeLabel =
+    purpose === OTP_PURPOSES.passwordReset
+      ? "إعادة تعيين كلمة المرور"
+      : "تفعيل الحساب";
+
+  const message = [
+    `رمز ${purposeLabel} الخاص بك هو: ${otp.code}`,
+    `صالح لمدة ${Math.floor(otp.expiresInSeconds / 60)} دقائق.`,
+    "لا تشارك هذا الرمز مع أي شخص.",
+  ].join("\n");
+
+  await sendWhatsAppText(otp.phone, message);
   return otp;
 }
 
