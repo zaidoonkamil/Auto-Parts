@@ -7,9 +7,16 @@ const SESSION_PATH = process.env.WHATSAPP_SESSION_PATH
   ? path.resolve(process.env.WHATSAPP_SESSION_PATH)
   : path.join(__dirname, "..", ".wwebjs_auth");
 const CLIENT_ID = process.env.WHATSAPP_CLIENT_ID || "auto-parts-admin";
-const AUTO_INIT = process.env.WHATSAPP_AUTO_INIT === "true";
-const RECONNECT_DELAY_MS = Number(process.env.WHATSAPP_RECONNECT_DELAY_MS || 15000);
-const MAX_RECONNECT_DELAY_MS = Number(process.env.WHATSAPP_MAX_RECONNECT_DELAY_MS || 120000);
+const AUTO_INIT = process.env.WHATSAPP_AUTO_INIT !== "false";
+const RECONNECT_DELAY_MS = Number(
+  process.env.WHATSAPP_RECONNECT_DELAY_MS || 15000
+);
+const MAX_RECONNECT_DELAY_MS = Number(
+  process.env.WHATSAPP_MAX_RECONNECT_DELAY_MS || 120000
+);
+const READY_WAIT_TIMEOUT_MS = Number(
+  process.env.WHATSAPP_READY_WAIT_TIMEOUT_MS || 20000
+);
 
 let client = null;
 let initializingPromise = null;
@@ -25,7 +32,10 @@ let manualLogout = false;
 
 function isDetachedFrameError(error) {
   const message = error?.message || String(error || "");
-  return message.includes("detached Frame") || message.includes("Attempted to use detached Frame");
+  return (
+    message.includes("detached Frame") ||
+    message.includes("Attempted to use detached Frame")
+  );
 }
 
 function ensureSessionPath() {
@@ -94,6 +104,33 @@ function getStatus() {
     connectedNumber,
     lastError: latestError,
   };
+}
+
+function waitForClientReady(timeoutMs = READY_WAIT_TIMEOUT_MS) {
+  if (client && connectionStatus === "ready") {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+
+    const timer = setInterval(() => {
+      if (client && connectionStatus === "ready") {
+        clearInterval(timer);
+        resolve();
+        return;
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        clearInterval(timer);
+        reject(
+          new Error(
+            "WhatsApp client is not ready yet. Wait a few seconds and try again."
+          )
+        );
+      }
+    }, 500);
+  });
 }
 
 async function buildQrImage(qrText) {
@@ -192,7 +229,8 @@ async function initWhatsAppClient() {
 
   bindClientEvents(client);
 
-  initializingPromise = client.initialize()
+  initializingPromise = client
+    .initialize()
     .catch((error) => {
       latestError = error.message;
       connectionStatus = "failed";
@@ -208,38 +246,45 @@ async function initWhatsAppClient() {
   return getStatus();
 }
 
-function ensureClientReady() {
-  if (!client || connectionStatus !== "ready") {
-    throw new Error("WhatsApp client is not ready. Scan QR and wait until status becomes ready.");
-  }
-}
-
-async function ensureWhatsAppReady({ timeoutMs = 20000, pollMs = 800 } = {}) {
-  if (connectionStatus === "idle" || connectionStatus === "disconnected" || connectionStatus === "failed") {
+async function ensureClientReady() {
+  if (!client && AUTO_INIT && !initializingPromise) {
     try {
       await initWhatsAppClient();
     } catch (_) {}
   }
 
-  const start = Date.now();
+  if (client && connectionStatus === "ready") {
+    return;
+  }
 
-  while (Date.now() - start < timeoutMs) {
-    if (connectionStatus === "ready" && client) {
-      return getStatus();
-    }
+  await waitForClientReady();
 
+  if (!client || connectionStatus !== "ready") {
+    throw new Error(
+      "WhatsApp client is not ready yet. Wait a few seconds and try again."
+    );
+  }
+}
+
+async function ensureWhatsAppReady() {
+  try {
+    await ensureClientReady();
+    return getStatus();
+  } catch (error) {
     if (connectionStatus === "qr_ready") {
-      throw new Error("WhatsApp is not connected yet. Please scan the QR code from admin settings first.");
+      throw new Error(
+        "WhatsApp is not connected yet. Please scan the QR code from admin settings first."
+      );
     }
 
     if (connectionStatus === "auth_failure") {
-      throw new Error("WhatsApp authentication failed. Please reconnect WhatsApp from admin settings.");
+      throw new Error(
+        "WhatsApp authentication failed. Please reconnect WhatsApp from admin settings."
+      );
     }
 
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
+    throw error;
   }
-
-  throw new Error("WhatsApp is not ready yet. Please wait until it becomes ready, then try again.");
 }
 
 async function getQrCode() {
@@ -312,7 +357,7 @@ function startWhatsAppAutoInit() {
 }
 
 async function resolveChatId(phone) {
-  ensureClientReady();
+  await ensureClientReady();
 
   const normalizedPhone = normalizeWhatsAppPhone(phone);
   const numberId = await client.getNumberId(normalizedPhone);
@@ -354,11 +399,7 @@ async function sendWhatsAppText(phone, message) {
     latestError = `Recovering WhatsApp session after detached frame: ${error.message}`;
     await resetClientSession();
     await initWhatsAppClient();
-
-    if (connectionStatus !== "ready") {
-      throw new Error("WhatsApp session was reset. Please wait until it becomes ready, then try again.");
-    }
-
+    await ensureClientReady();
     return trySend();
   }
 }
