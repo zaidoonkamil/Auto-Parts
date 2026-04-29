@@ -109,8 +109,22 @@ async function verifyOtp(phone, code, purpose = "activation") {
   };
 }
 
+async function deleteOtpByCode(phone, code, purpose = "activation") {
+  const normalizedPhone = normalizePhone(phone);
+
+  await OtpCode.destroy({
+    where: {
+      phone: normalizedPhone,
+      code: String(code).trim(),
+      purpose,
+      isUsed: false,
+    },
+  });
+}
+
 module.exports = {
   createOtp,
+  deleteOtpByCode,
   normalizePhone,
   verifyOtp,
 };

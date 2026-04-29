@@ -214,6 +214,34 @@ function ensureClientReady() {
   }
 }
 
+async function ensureWhatsAppReady({ timeoutMs = 20000, pollMs = 800 } = {}) {
+  if (connectionStatus === "idle" || connectionStatus === "disconnected" || connectionStatus === "failed") {
+    try {
+      await initWhatsAppClient();
+    } catch (_) {}
+  }
+
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    if (connectionStatus === "ready" && client) {
+      return getStatus();
+    }
+
+    if (connectionStatus === "qr_ready") {
+      throw new Error("WhatsApp is not connected yet. Please scan the QR code from admin settings first.");
+    }
+
+    if (connectionStatus === "auth_failure") {
+      throw new Error("WhatsApp authentication failed. Please reconnect WhatsApp from admin settings.");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+
+  throw new Error("WhatsApp is not ready yet. Please wait until it becomes ready, then try again.");
+}
+
 async function getQrCode() {
   return {
     status: connectionStatus,
@@ -336,6 +364,7 @@ async function sendWhatsAppText(phone, message) {
 }
 
 module.exports = {
+  ensureWhatsAppReady,
   getQrCode,
   getStatus,
   initWhatsAppClient,

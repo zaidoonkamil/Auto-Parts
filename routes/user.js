@@ -5,8 +5,8 @@ const multer = require("multer");
 const { Op } = require("sequelize");
 const uploadImage = require("../middlewares/uploads");
 const { User, UserDevice } = require("../models");
-const { createOtp, normalizePhone, verifyOtp } = require("../services/otpService");
-const { sendWhatsAppText } = require("../services/waSender");
+const { createOtp, deleteOtpByCode, normalizePhone, verifyOtp } = require("../services/otpService");
+const { ensureWhatsAppReady, sendWhatsAppText } = require("../services/waSender");
 
 const saltRounds = 10;
 const router = express.Router();
@@ -31,6 +31,7 @@ function parseOtpPurpose(purpose) {
 }
 
 async function sendOtpForPurpose(phone, purpose) {
+  await ensureWhatsAppReady();
   const otp = await createOtp(phone, purpose);
 
   const purposeLabel =
@@ -44,8 +45,13 @@ async function sendOtpForPurpose(phone, purpose) {
     "لا تشارك هذا الرمز مع أي شخص.",
   ].join("\n");
 
-  await sendWhatsAppText(otp.phone, message);
-  return otp;
+  try {
+    await sendWhatsAppText(otp.phone, message);
+    return otp;
+  } catch (error) {
+    await deleteOtpByCode(otp.phone, otp.code, purpose);
+    throw error;
+  }
 }
 
 router.post("/send-otp", upload.none(), async (req, res) => {
