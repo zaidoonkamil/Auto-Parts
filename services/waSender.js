@@ -23,6 +23,11 @@ let reconnectTimer = null;
 let reconnectAttempts = 0;
 let manualLogout = false;
 
+function isDetachedFrameError(error) {
+  const message = error?.message || String(error || "");
+  return message.includes("detached Frame") || message.includes("Attempted to use detached Frame");
+}
+
 function ensureSessionPath() {
   fs.mkdirSync(SESSION_PATH, { recursive: true });
 }
@@ -250,6 +255,26 @@ async function logoutWhatsApp() {
   return { success: true, status: connectionStatus };
 }
 
+async function resetClientSession() {
+  manualLogout = false;
+  clearReconnectTimer();
+
+  if (client) {
+    try {
+      await client.destroy();
+    } catch (_) {}
+  }
+
+  client = null;
+  initializingPromise = null;
+  latestQrText = null;
+  latestQrImage = null;
+  latestError = null;
+  authenticated = false;
+  connectedNumber = null;
+  connectionStatus = "idle";
+}
+
 function startWhatsAppAutoInit() {
   if (!AUTO_INIT) {
     return;
@@ -279,15 +304,35 @@ async function sendWhatsAppText(phone, message) {
     throw new Error("Message is required");
   }
 
-  const { phone: normalizedPhone, chatId } = await resolveChatId(phone);
-  const sentMessage = await client.sendMessage(chatId, String(message).trim());
+  const trySend = async () => {
+    const { phone: normalizedPhone, chatId } = await resolveChatId(phone);
+    const sentMessage = await client.sendMessage(chatId, String(message).trim());
 
-  return {
-    to: normalizedPhone,
-    messageId: sentMessage?.id?._serialized || null,
-    timestamp: sentMessage?.timestamp || null,
-    status: "sent",
+    return {
+      to: normalizedPhone,
+      messageId: sentMessage?.id?._serialized || null,
+      timestamp: sentMessage?.timestamp || null,
+      status: "sent",
+    };
   };
+
+  try {
+    return await trySend();
+  } catch (error) {
+    if (!isDetachedFrameError(error)) {
+      throw error;
+    }
+
+    latestError = `Recovering WhatsApp session after detached frame: ${error.message}`;
+    await resetClientSession();
+    await initWhatsAppClient();
+
+    if (connectionStatus !== "ready") {
+      throw new Error("WhatsApp session was reset. Please wait until it becomes ready, then try again.");
+    }
+
+    return trySend();
+  }
 }
 
 module.exports = {
