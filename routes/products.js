@@ -164,7 +164,7 @@ router.get("/products/search", async (req, res) => {
 router.get("/products/featured", async (req, res) => {
   const userId = parseInt(req.query.userId);
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 50;
+  const limit = parseInt(50) || 50;
   const offset = (page - 1) * limit;
 
   try {
