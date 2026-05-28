@@ -4,7 +4,8 @@ const { Op } = require("sequelize");
 const { Category, Product, User } = require("../models");
 const upload = require("../middlewares/uploads");
 
-const categoryImageError = "يجب رفع صورة واحدة على الأقل";
+const categoryImageError = "ÙŠØ¬Ø¨ Ø±ÙØ¹ ØµÙˆØ±Ø© ÙˆØ§Ø­Ø¯Ø© Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„";
+const DEFAULT_CATEGORY_PRODUCTS_PAGE_SIZE = 50;
 
 async function validateParentCategory(parentId) {
   if (!parentId) {
@@ -13,11 +14,11 @@ async function validateParentCategory(parentId) {
 
   const parentCategory = await Category.findByPk(parentId);
   if (!parentCategory) {
-    return { error: "القسم الرئيسي غير موجود" };
+    return { error: "Ø§Ù„Ù‚Ø³Ù… Ø§Ù„Ø±Ø¦ÙŠØ³ÙŠ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯" };
   }
 
   if (parentCategory.parentId) {
-    return { error: "لا يمكن إنشاء قسم فرعي داخل قسم فرعي آخر" };
+    return { error: "Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø¥Ù†Ø´Ø§Ø¡ Ù‚Ø³Ù… ÙØ±Ø¹ÙŠ Ø¯Ø§Ø®Ù„ Ù‚Ø³Ù… ÙØ±Ø¹ÙŠ Ø¢Ø®Ø±" };
   }
 
   return { parentCategory };
@@ -27,7 +28,7 @@ router.post("/categories", upload.array("images", 5), async (req, res) => {
   const { name, name_ar, name_ckb, parentId } = req.body;
 
   if (!name) {
-    return res.status(400).json({ error: "اسم القسم مطلوب" });
+    return res.status(400).json({ error: "Ø§Ø³Ù… Ø§Ù„Ù‚Ø³Ù… Ù…Ø·Ù„ÙˆØ¨" });
   }
 
   if (!req.files || req.files.length === 0) {
@@ -123,7 +124,7 @@ router.get("/categories/:id", upload.none(), async (req, res) => {
     });
 
     if (!category) {
-      return res.status(404).json({ error: "القسم غير موجود" });
+      return res.status(404).json({ error: "Ø§Ù„Ù‚Ø³Ù… ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯" });
     }
 
     res.json(category);
@@ -137,7 +138,7 @@ router.get("/categories/:id/subcategories", upload.none(), async (req, res) => {
   try {
     const category = await Category.findByPk(req.params.id);
     if (!category) {
-      return res.status(404).json({ error: "القسم غير موجود" });
+      return res.status(404).json({ error: "Ø§Ù„Ù‚Ø³Ù… ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯" });
     }
 
     const subcategories = await Category.findAll({
@@ -156,7 +157,13 @@ router.get("/categories/:id/products", async (req, res) => {
   const categoryId = req.params.id;
   const userId = parseInt(req.query.userId) || null;
   let page = parseInt(req.query.page) || 1;
-  let pageSize = parseInt(req.query.pageSize) || 10;
+  let pageSize = parseInt(req.query.pageSize, 10);
+
+  if (Number.isNaN(pageSize) || pageSize <= 0) {
+    pageSize = DEFAULT_CATEGORY_PRODUCTS_PAGE_SIZE;
+  } else if (pageSize > DEFAULT_CATEGORY_PRODUCTS_PAGE_SIZE) {
+    pageSize = DEFAULT_CATEGORY_PRODUCTS_PAGE_SIZE;
+  }
 
   const offset = (page - 1) * pageSize;
   const limit = pageSize;
@@ -164,7 +171,7 @@ router.get("/categories/:id/products", async (req, res) => {
   try {
     const category = await Category.findByPk(categoryId);
     if (!category) {
-      return res.status(404).json({ error: "القسم غير موجود" });
+      return res.status(404).json({ error: "Ø§Ù„Ù‚Ø³Ù… ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯" });
     }
 
     if (!category.parentId) {
@@ -232,11 +239,11 @@ router.delete("/categories/:id", async (req, res) => {
   try {
     const category = await Category.findByPk(categoryId);
     if (!category) {
-      return res.status(404).json({ error: "القسم غير موجود" });
+      return res.status(404).json({ error: "Ø§Ù„Ù‚Ø³Ù… ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯" });
     }
 
     await category.destroy();
-    res.json({ message: "تم حذف القسم بنجاح" });
+    res.json({ message: "ØªÙ… Ø­Ø°Ù Ø§Ù„Ù‚Ø³Ù… Ø¨Ù†Ø¬Ø§Ø­" });
   } catch (error) {
     console.error("Error deleting category:", error);
     res.status(500).json({ error: "Internal Server Error" });
