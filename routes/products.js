@@ -71,7 +71,7 @@ router.get("/products/search", async (req, res) => {
   const query = (req.query.q || "").trim().toLowerCase();
   const userId = parseInt(req.query.userId);
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+  const limit = parseInt(req.query.limit) || 50;
   const offset = (page - 1) * limit;
 
   if (!query || query.length < 2) {
@@ -164,7 +164,7 @@ router.get("/products/search", async (req, res) => {
 router.get("/products/featured", async (req, res) => {
   const userId = parseInt(req.query.userId);
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 8;
+  const limit = parseInt(req.query.limit) || 50;
   const offset = (page - 1) * limit;
 
   try {
@@ -224,7 +224,7 @@ router.get("/products/:id", async (req, res) => {
   try {
     let { page, limit } = req.query;
     page = parseInt(page) || 1;
-    limit = parseInt(limit) || 40;
+    limit = parseInt(limit) || 50;
     const offset = (page - 1) * limit;
 
     const { count, rows: products } = await Product.findAndCountAll({
@@ -318,7 +318,7 @@ router.get("/products/seller/:sellerId", async (req, res) => {
   try {
     let { page, limit } = req.query;
     page = parseInt(page) || 1;
-    limit = parseInt(limit) || 10;
+    limit = parseInt(limit) || 50;
     const offset = (page - 1) * limit;
 
     const { count, rows: products } = await Product.findAndCountAll({
